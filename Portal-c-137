@@ -1,0 +1,376 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+local TeleportService = game:GetService("TeleportService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local camera = workspace.CurrentCamera
+
+local SETTINGS = {
+    Color = Color3.fromRGB(0, 255, 70),
+    Size = 7,
+    Max = 2,
+    Cooldown = 1.3
+}
+
+local function sound(id, vol)
+    local s = Instance.new("Sound")
+    s.SoundId = "rbxassetid://" .. id
+    s.Volume = vol or 0.7
+    s.Parent = SoundService
+    return s
+end
+
+local openS  = sound(9120392871, 0.6)
+local closeS = sound(9120392872, 0.5)
+local shootS = sound(12222200, 0.8)
+local tpS    = sound(9120392873, 0.9)
+
+local function makeGun()
+    local tool = Instance.new("Tool")
+    tool.Name = " "
+    tool.RequiresHandle = true
+    tool.CanBeDropped = false
+
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(0.4, 1.2, 0.4)
+    handle.Color = Color3.fromRGB(160, 160, 165)
+    handle.Material = Enum.Material.SmoothPlastic
+    handle.Parent = tool
+
+    local body = Instance.new("Part")
+    body.Size = Vector3.new(0.7, 0.45, 1.5)
+    body.Color = Color3.fromRGB(175, 175, 180)
+    body.Material = Enum.Material.SmoothPlastic
+    body.CanCollide = false
+    body.Parent = tool
+
+    local w1 = Instance.new("Weld")
+    w1.Part0 = handle
+    w1.Part1 = body
+    w1.C0 = CFrame.new(0, 0.6, -0.4)
+    w1.Parent = handle
+
+    local tube = Instance.new("Part")
+    tube.Size = Vector3.new(0.4, 0.65, 0.4)
+    tube.Color = Color3.fromRGB(0, 255, 70)
+    tube.Material = Enum.Material.Neon
+    tube.Transparency = 0.2
+    tube.CanCollide = false
+    tube.Parent = tool
+
+    local w2 = Instance.new("Weld")
+    w2.Part0 = body
+    w2.Part1 = tube
+    w2.C0 = CFrame.new(0, 0.5, 0.1)
+    w2.Parent = body
+
+    local light = Instance.new("PointLight")
+    light.Color = Color3.fromRGB(0, 255, 70)
+    light.Range = 5
+    light.Brightness = 1.2
+    light.Parent = tube
+
+    return tool
+end
+
+local tool = makeGun()
+tool.Parent = player.Backpack
+
+local Portal = {}
+Portal.__index = Portal
+
+function Portal.new(pos, normal)
+    local self = setmetatable({}, Portal)
+    local model = Instance.new("Model")
+
+    local disc = Instance.new("Part")
+    disc.Size = Vector3.new(SETTINGS.Size, SETTINGS.Size, 0.2)
+    disc.Anchored = true
+    disc.CanCollide = false
+    disc.Material = Enum.Material.Neon
+    disc.Color = SETTINGS.Color
+    disc.Transparency = 0.2
+    disc.CFrame = CFrame.lookAt(pos, pos + normal)
+    disc.Parent = model
+
+    local ring = Instance.new("Part")
+    ring.Size = Vector3.new(SETTINGS.Size + 1.2, SETTINGS.Size + 1.2, 0.1)
+    ring.Anchored = true
+    ring.CanCollide = false
+    ring.Material = Enum.Material.Neon
+    ring.Color = SETTINGS.Color
+    ring.Transparency = 0.5
+    ring.CFrame = disc.CFrame
+    ring.Parent = model
+
+    local box = Instance.new("Part")
+    box.Size = Vector3.new(SETTINGS.Size * 0.85, SETTINGS.Size * 0.85, 2.5)
+    box.Anchored = true
+    box.CanCollide = false
+    box.Transparency = 1
+    box.CFrame = disc.CFrame
+    box.Parent = model
+
+    local pl = Instance.new("PointLight")
+    pl.Color = SETTINGS.Color
+    pl.Range = 14
+    pl.Brightness = 2
+    pl.Parent = disc
+
+    self.Model = model
+    self.Disc = disc
+    self.Ring = ring
+    self.Box = box
+    self.Pos = pos
+    self.Normal = normal
+    self.Connected = nil
+    self.Last = 0
+
+    disc.Size = Vector3.new(0.1, 0.1, 0.1)
+    ring.Size = Vector3.new(0.1, 0.1, 0.1)
+    TweenService:Create(disc, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = Vector3.new(SETTINGS.Size, SETTINGS.Size, 0.2)}):Play()
+    TweenService:Create(ring, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Size = Vector3.new(SETTINGS.Size + 1.2, SETTINGS.Size + 1.2, 0.1)}):Play()
+
+    openS:Play()
+    model.Parent = workspace
+    return self
+end
+
+function Portal:Connect(o)
+    self.Connected = o
+    o.Connected = self
+end
+
+function Portal:TP(char)
+    if not self.Connected or tick() - self.Last < SETTINGS.Cooldown then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    if (hrp.Position - self.Box.Position).Magnitude > SETTINGS.Size / 1.7 then return end
+    tpS:Play()
+    hrp.CFrame = CFrame.new(self.Connected.Pos + self.Connected.Normal * 3)
+    self.Last = tick()
+    self.Connected.Last = tick()
+end
+
+function Portal:Destroy()
+    closeS:Play()
+    TweenService:Create(self.Disc, TweenInfo.new(0.2), {Size = Vector3.new(0.1, 0.1, 0.1)}):Play()
+    TweenService:Create(self.Ring, TweenInfo.new(0.2), {Size = Vector3.new(0.1, 0.1, 0.1)}):Play()
+    task.wait(0.2)
+    if self.Model then self.Model:Destroy() end
+end
+
+local Manager = {List = {}}
+
+function Manager:Add(pos, normal)
+    while #self.List >= SETTINGS.Max do
+        table.remove(self.List, 1):Destroy()
+    end
+    local p = Portal.new(pos, normal)
+    table.insert(self.List, p)
+    if #self.List == 2 then self.List[1]:Connect(self.List[2]) end
+end
+
+function Manager:Clear()
+    for _, p in ipairs(self.List) do p:Destroy() end
+    self.List = {}
+end
+
+function Manager:Update()
+    for _, p in ipairs(self.List) do
+        if p.Connected then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr.Character then p:TP(plr.Character) end
+            end
+        end
+    end
+end
+
+local function shoot()
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local origin = character.HumanoidRootPart.Position
+    local dir = camera.CFrame.LookVector * 130
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {character}
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local hit = workspace:Raycast(origin, dir, params)
+    if hit then
+        shootS:Play()
+        Manager:Add(hit.Position + hit.Normal * 0.3, hit.Normal)
+    end
+end
+
+tool.Activated:Connect(shoot)
+
+local gui = Instance.new("ScreenGui")
+gui.Name = " "
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 160, 0, 200)
+frame.Position = UDim2.new(1, -180, 0.25, 0)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(0, 255, 70)
+stroke.Thickness = 1.5
+stroke.Parent = frame
+
+local title = Instance.new("TextButton")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundColor3 = Color3.fromRGB(0, 180, 50)
+title.Text = ""
+title.Parent = frame
+Instance.new("UICorner", title).CornerRadius = UDim.new(0, 10)
+
+local collapse = Instance.new("TextButton")
+collapse.Size = UDim2.new(0, 26, 0, 22)
+collapse.Position = UDim2.new(1, -30, 0, 4)
+collapse.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+collapse.Text = "−"
+collapse.TextColor3 = Color3.new(1, 1, 1)
+collapse.Font = Enum.Font.GothamBold
+collapse.TextSize = 15
+collapse.Parent = title
+Instance.new("UICorner", collapse).CornerRadius = UDim.new(0, 5)
+
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, 0, 1, -30)
+content.Position = UDim2.new(0, 0, 0, 30)
+content.BackgroundTransparency = 1
+content.Parent = frame
+
+local function btn(color, y, h)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.88, 0, 0, h or 32)
+    b.Position = UDim2.new(0.06, 0, 0, y)
+    b.BackgroundColor3 = color
+    b.Text = ""
+    b.Parent = content
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+    return b
+end
+
+local shootBtn = btn(Color3.fromRGB(0, 200, 60), 6)
+local clearBtn = btn(Color3.fromRGB(200, 50, 50), 44)
+
+local xBox = Instance.new("TextBox")
+xBox.Size = UDim2.new(0.28, 0, 0, 26)
+xBox.Position = UDim2.new(0.06, 0, 0, 86)
+xBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+xBox.PlaceholderText = "X"
+xBox.Text = ""
+xBox.TextColor3 = Color3.new(1, 1, 1)
+xBox.Font = Enum.Font.Gotham
+xBox.TextSize = 13
+xBox.Parent = content
+Instance.new("UICorner", xBox).CornerRadius = UDim.new(0, 5)
+
+local yBox = xBox:Clone()
+yBox.Position = UDim2.new(0.36, 0, 0, 86)
+yBox.PlaceholderText = "Y"
+yBox.Parent = content
+
+local zBox = xBox:Clone()
+zBox.Position = UDim2.new(0.66, 0, 0, 86)
+zBox.PlaceholderText = "Z"
+zBox.Parent = content
+
+local tpBtn = btn(Color3.fromRGB(0, 140, 200), 120, 28)
+
+local placeBox = Instance.new("TextBox")
+placeBox.Size = UDim2.new(0.55, 0, 0, 28)
+placeBox.Position = UDim2.new(0.06, 0, 0, 156)
+placeBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+placeBox.PlaceholderText = "ID"
+placeBox.Text = ""
+placeBox.TextColor3 = Color3.new(1, 1, 1)
+placeBox.Font = Enum.Font.Gotham
+placeBox.TextSize = 13
+placeBox.Parent = content
+Instance.new("UICorner", placeBox).CornerRadius = UDim.new(0, 5)
+
+local placeBtn = Instance.new("TextButton")
+placeBtn.Size = UDim2.new(0.3, 0, 0, 28)
+placeBtn.Position = UDim2.new(0.64, 0, 0, 156)
+placeBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+placeBtn.Text = ""
+placeBtn.Parent = content
+Instance.new("UICorner", placeBtn).CornerRadius = UDim.new(0, 5)
+
+local collapsed = false
+local fullSize = frame.Size
+
+collapse.MouseButton1Click:Connect(function()
+    collapsed = not collapsed
+    if collapsed then
+        content.Visible = false
+        frame.Size = UDim2.new(0, 160, 0, 30)
+        collapse.Text = "+"
+    else
+        content.Visible = true
+        frame.Size = fullSize
+        collapse.Text = "−"
+    end
+end)
+
+local dragging, dragStart, startPos = false
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local d = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+shootBtn.MouseButton1Click:Connect(shoot)
+clearBtn.MouseButton1Click:Connect(function() Manager:Clear() end)
+
+tpBtn.MouseButton1Click:Connect(function()
+    local x, y, z = tonumber(xBox.Text), tonumber(yBox.Text), tonumber(zBox.Text)
+    if x and y and z and character and character:FindFirstChild("HumanoidRootPart") then
+        tpS:Play()
+        character.HumanoidRootPart.CFrame = CFrame.new(x, y, z)
+    end
+end)
+
+placeBtn.MouseButton1Click:Connect(function()
+    local id = tonumber(placeBox.Text)
+    if id then TeleportService:Teleport(id, player) end
+end)
+
+player.CharacterAdded:Connect(function(c)
+    character = c
+    Manager:Clear()
+    task.wait(0.6)
+    if tool and not tool.Parent then
+        tool.Parent = player.Backpack
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    Manager:Update()
+end)
